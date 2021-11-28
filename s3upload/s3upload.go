@@ -17,27 +17,28 @@ import (
 
 var s3session *s3.S3
 var sqsQueue *sqs.SQS
-var REGION, BUCKET, QUEUE_URL string
+var region, bucket, queueURL string
 
-
+// InputEvent is the input
 type InputEvent struct {
 	Link string `json:"link"`
 	Key  string `json:"key"`
 }
 
+// OutputEvent is the output
 type OutputEvent struct {
-	Link string `json:"link"`
-	Key  string `json:"key"`
+	Link   string `json:"link"`
+	Key    string `json:"key"`
 	S3Link string `json:"s3link"`
 }
 
 func init() {
-	REGION = os.Getenv("REGION")
-	BUCKET = os.Getenv("BUCKET")
-	QUEUE_URL = os.Getenv("QUEUE")
+	region = os.Getenv("REGION")
+	bucket = os.Getenv("BUCKET")
+	queueURL = os.Getenv("QUEUE")
 
 	sess := session.Must(session.NewSession(&aws.Config{
-		Region: aws.String(REGION),
+		Region: aws.String(region),
 	}))
 
 	s3session = s3.New(sess)
@@ -48,15 +49,16 @@ func main() {
 	lambda.Start(Handler)
 }
 
+// Handler for Lambda runtime
 func Handler(ctx context.Context, event InputEvent) (err error) {
-	image, err := GetImage(event.Link)
+	image, err := getImage(event.Link)
 	if err != nil {
 		return err
 	}
 
 	_, err = s3session.PutObject(&s3.PutObjectInput{
 		Body:   bytes.NewReader(image),
-		Bucket: aws.String(BUCKET),
+		Bucket: aws.String(bucket),
 		Key:    aws.String(event.Key),
 	})
 
@@ -65,11 +67,11 @@ func Handler(ctx context.Context, event InputEvent) (err error) {
 	}
 
 	var output = OutputEvent{
-		Key: event.Key,
+		Key:  event.Key,
 		Link: event.Link,
 	}
 
-	output.S3Link = fmt.Sprintf("https://%s.%s.amazonaws.com/%s", BUCKET, REGION, output.Key)
+	output.S3Link = fmt.Sprintf("https://%s.%s.amazonaws.com/%s", bucket, region, output.Key)
 
 	_, err = sqsQueue.SendMessage(&sqs.SendMessageInput{
 		MessageAttributes: map[string]*sqs.MessageAttributeValue{
@@ -87,20 +89,19 @@ func Handler(ctx context.Context, event InputEvent) (err error) {
 			},
 		},
 		MessageBody: aws.String("New event!"),
-		QueueUrl: aws.String(QUEUE_URL),
+		QueueUrl:    aws.String(queueURL),
 	})
 
 	return err
 }
 
-func GetImage(url string) (bytes []byte, err error) {
+func getImage(url string) (bytes []byte, err error) {
 	resp, err := http.Get(url)
 	if err != nil {
 		return bytes, err
 	}
 
 	defer resp.Body.Close()
-
 
 	bytes, err = ioutil.ReadAll(resp.Body)
 	return bytes, err

@@ -12,14 +12,14 @@ import (
 )
 
 var dynamo *dynamodb.DynamoDB
-var TABLE, REGION string
+var table, region string
 
 func init() {
-	TABLE = os.Getenv("TABLE")
-	REGION = os.Getenv("REGION")
+	table = os.Getenv("TABLE")
+	region = os.Getenv("REGION")
 
 	dynamo = dynamodb.New(session.Must(session.NewSession(&aws.Config{
-		Region: aws.String(REGION),
+		Region: aws.String(region),
 	})))
 }
 
@@ -27,9 +27,10 @@ func main() {
 	lambda.Start(Handler)
 }
 
+// Handler for Lambda runtime
 func Handler(ctx context.Context, sqsEvent events.SQSEvent) (err error) {
 	for _, message := range sqsEvent.Records {
-		err = PutEvent(message)
+		err = putEvent(message)
 		if err != nil {
 			return err
 		}
@@ -37,7 +38,7 @@ func Handler(ctx context.Context, sqsEvent events.SQSEvent) (err error) {
 	return err
 }
 
-func PutEvent(message events.SQSMessage) error {
+func putEvent(message events.SQSMessage) error {
 	_, err := dynamo.PutItem(&dynamodb.PutItemInput{
 		Item: map[string]*dynamodb.AttributeValue{
 			"Link": {
@@ -50,7 +51,7 @@ func PutEvent(message events.SQSMessage) error {
 				S: message.MessageAttributes["S3Link"].StringValue,
 			},
 		},
-		TableName: aws.String(TABLE),
+		TableName: aws.String(table),
 	})
 
 	return err
